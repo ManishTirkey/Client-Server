@@ -60,7 +60,6 @@ def Users(conn, addr):
                 print(pr_msg)
                 dis_msg = f"\n{colors.fg.red}User {addr} Disconnected.....{colors.reset}"
                 conn.close()
-                CONNECTED = False
                 break
             print(pr_msg)
     print("client disconnected....")

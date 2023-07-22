@@ -31,7 +31,7 @@ FORMAT = 'utf-8'
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 
-def connect_to_server():
+def connect_to_server(ADDR):
     with client_socket as cs:
         cs.connect(ADDR)
         print(cs)
@@ -49,5 +49,5 @@ def connect_to_server():
                 CONNECTED = False
 
 
-connect_to_server()
+connect_to_server(ADDR)
 

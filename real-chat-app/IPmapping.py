@@ -21,6 +21,9 @@ class Mapping:
     def get_all_maps(self):
         return self.mapping
 
+    def get_all_names(self):
+        return [client["name"] for client in self.mapping]
+
     def save(self):
         with open('clients_db.json', 'w') as clients_file:
             json.dump(self.mapping, clients_file)
@@ -56,8 +59,6 @@ class Mapping:
                 raise ExistNameMappingException("Name already exists.")
 
             self.mapping.append(client)
-            print("After inserting:")
-            print(self.mapping)
             self.save()
 
 

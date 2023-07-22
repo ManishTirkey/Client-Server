@@ -36,25 +36,3 @@ class thread_with_trace(threading.Thread):
 
     def kill(self):
         self.killed = True
-
-
-def Func():
-    i = 0
-    while True:
-        print(f"h {i}")
-        i = i+1
-
-
-if __name__ == '__main__':
-    threa = thread_with_trace(target=Func)
-    threa.start()
-
-    time.sleep(2)
-    print("going to kill")
-    threa.kill()
-    print(threa.isAlive())
-    if not threa.isAlive():
-        print("thread is killed")
-        print(threa.isAlive())
-        print(not threa.isAlive())
-
