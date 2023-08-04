@@ -39,7 +39,7 @@ class MultiClientServer:
                 if not data:
                     break
                 message = data.decode('utf-8')
-                print(f"Message from {name}: {message}")
+                print(f"{name}: {message}")
 
         except (asyncio.CancelledError, ConnectionResetError):
             pass
@@ -65,7 +65,7 @@ class MultiClientServer:
 
 if __name__ == "__main__":
 
-    server = MultiClientServer('192.168.94.190', 12345)  # Replace with your desired IP and port
+    server = MultiClientServer('192.168.149.190', 65432)
 
     loop = asyncio.get_event_loop()
     try:

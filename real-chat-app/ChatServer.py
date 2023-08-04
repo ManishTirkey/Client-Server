@@ -1,7 +1,6 @@
 # import socket
 # import time
 #
-# from CustomThread import CustomThread
 #
 # IS_ONLINE = False
 # CLIENT_CONNECTIONS = []
@@ -245,71 +244,151 @@
 #
 #
 #
-# ---------------------------------class based of above
+import queue
+# ---------------------------------class based of above- final
+
 
 import socket
 import time
-from threading import Thread
 from IPmapping import mapping
 from CUSTOM_THREAD import thread_with_trace as CThread
+import threading
+import queue
 
 FORMAT = 'utf-8'
 
 
-class ChatServer:
-    def __init__(self, host, port):
-        self.host = host
-        self.port = port
-        self.server_socket = None
+class SocketBindingException(Exception):
+    pass
+
+
+class QueueEmpty(Exception):
+    pass
+
+
+class LockingMechanism(queue.Queue):
+    def __init__(self):
+        super().__init__()
+        self.lock = threading.Lock()
+
+    def insert(self, data):
+        with self.lock:
+            self.put(data)
+
+
+class ChatServer(LockingMechanism):
+    def __init__(self):
+        super().__init__()
+
+        self.FORMAT = 'utf-8'
+        self.host = None
+        self.port = None
         self.client_threads = []
+        self.client_socket = []
+        self.isRunning = False
         self.SERVER = None
 
-    @staticmethod
-    def receive_client_msg(sock, addr):
-        while True:
-            data = sock.recv(1024).decode(FORMAT)
-            if data:
-                if mapping.is_exists(ip=addr[0]):
-                    name = mapping.get_name_with_ip(addr[0])
-                    print(f"{name}/: {data}")
-                else:
-                    print(f"NEW CLIENT:[{addr}]/: {data}")
-
-                if data.title() == "/Exit":
-                    sock.close()
-                    print("client disconnected....")
-                    break
-
-    def handle_client(self, client_socket, addr):
-        client_receive_thread = Thread(target=self.receive_client_msg, daemon=True, args=(client_socket, addr))
-        client_receive_thread.start()
-        self.client_threads.append(client_receive_thread)
-
-    def start_server(self):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.server_socket.bind((self.host, self.port))
-        self.server_socket.listen()
 
+    def receive_client_msg(self, sock, addr):
         while True:
-            conn, addr = self.server_socket.accept()
-            client_thread = Thread(target=self.handle_client, daemon=True, args=(conn, addr))
-            client_thread.start()
-            self.client_threads.append(client_thread)
+            data = sock.recv(1024).decode(self.FORMAT)
+            if not data:
+                print(f"{addr} is disconnected.")
+                break
+            data_list = {
+                "address": addr,
+                "msg": data
+            }
+            self.insert(data_list)
+        # while True:
+        #     data = sock.recv(1024).decode(FORMAT)
+        #     if data:
+        #         if mapping.is_exists(ip=addr[0]):
+        #             name = mapping.get_name_with_ip(addr[0])
+        #             print(f"{name}/: {data}")
+        #         else:
+        #             print(f"NEW CLIENT:[{addr}]/>: {data}")
+        #
+        #         if data.title() == "/Exit":
+        #             sock.close()
+        #             self.client_socket.remove(sock)
+        #             print("client disconnected....")
+        #             break
+        # print(f"{addr} is disconnected")
+
+    def handle_client(self, client_socket, addr):
+        client_receive_thread = CThread(target=self.receive_client_msg, daemon=True, args=(client_socket, addr))
+        client_receive_thread.start()
+
+    def start_server(self):
+        self.isRunning = True
+
+        try:
+            self.server_socket.listen()
+
+            print(f"server is running: [{self.host}]:[{self.port}]")
+            while self.isRunning:
+                conn, addr = self.server_socket.accept()
+                self.client_socket.append(conn)
+
+                client_thread = CThread(target=self.handle_client, daemon=True, args=(conn, addr))
+                client_thread.start()
+
+                self.client_threads.append(client_thread)
+
+        except Exception as e:
+            print(f"an error is occured in server, error is: {e}")
+        finally:
+            self.isRunning = False
 
     def run(self):
-        self.SERVER = Thread(target=self.start_server)
-        self.SERVER.start()
+        try:
+            self.server_socket.bind((self.host, self.port))
+        except Exception as e:
+            print(f"error while binding: {e}")
+            raise SocketBindingException("error while Binding")
+        else:
+            self.SERVER = CThread(target=self.start_server)
+            self.SERVER.start()
 
+    def Connect(self, host, port):
+        self.host = host
+        self.port = port
+
+    def stop(self):
+        print("client sockets: ")
+        for client in self.client_socket:
+            print(f"client: {client}")
+            client.sendall("exit".encode(self.FORMAT))
+            # try:
+            #     client.close()
+            # except Exception as e:
+            #     pass
+
+        print("client threads")
         for client_thread in self.client_threads:
-            client_thread.join()
+            print(client_thread.is_alive(), end=", ")
 
-        self.SERVER.join()
+        self.server_socket.close()
+        self.isRunning = False
+        self.SERVER.kill()
+        print("server is closed")
 
+    def isServerOnline(self):
+        return self.isRunning
+
+
+Server = ChatServer()
 
 if __name__ == "__main__":
-    host = "localhost"
+    # host = "127.0.0.1"
+    host = "192.168.43.20"
     port = 65432
 
-    server = ChatServer(host, port)
+    server = ChatServer()
+    server.Connect(host, port)
     server.run()
+    time.sleep(20)
+    server.stop()

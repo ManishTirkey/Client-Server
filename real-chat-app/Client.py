@@ -1,8 +1,11 @@
 import socket
 import time
+import threading
 
-SERVER_HOST = "0.0.0.0"
-PORT = 12345
+SERVER_HOST = "127.0.0.1"
+# SERVER_HOST = "192.168.43.20"
+
+PORT = 65432
 
 ADDR = (SERVER_HOST, PORT)
 FORMAT = 'utf-8'
@@ -10,22 +13,94 @@ FORMAT = 'utf-8'
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 
-def connect_to_server(ADDR):
+# def connect_to_server(ADDR):
+#     try:
+#         with client_socket as cs:
+#             cs.connect(ADDR)
+#
+#             CONNECTED = True
+#             while CONNECTED:
+#                 msg = input(f"[You]:")
+#                 try:
+#                     cs.sendall(msg.encode("utf-8"))
+#                     if msg.title() == "/Exit":
+#                         print(f"Disconnected....")
+#                         cs.close()
+#                         break
+#                 except Exception as e:
+#                     print(f"error is: {e}")
+#                     break
+#     except Exception as e:
+#         print(f"error is: {e}")
+#
 
-    with client_socket as cs:
-        cs.connect(ADDR)
+# connect_to_server(ADDR)
 
-        CONNECTED = True
-        while CONNECTED:
-            msg = input(f"[You]:")
-            cs.sendall(msg.encode("utf-8"))
-            if msg.title() == "/Exit":
-                print(f"Disconnected....")
-                cs.close()
-                break
+class ServerOffline(Exception):
+    pass
 
 
-connect_to_server(ADDR)
+class Client:
+    def __init__(self):
+        self.server = None
+        self.port = None
+        self.ADDR = None
+        self.FORMAT = "utf-8"
+        self.isClosed = True
+
+        self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+    def connect(self, server, port):
+        self.server = server
+        self.port = port
+        self.isClosed = False
+
+        self.ADDR = (self.server, self.port)
+        try:
+
+            # with self.client_socket as self.CONNECTION:
+            self.client_socket.connect(self.ADDR)
+            receiver_thread = threading.Thread(target=self.receiveMsgExit, daemon=True)
+            receiver_thread.start()
+            print(f"client {self.ADDR} connected to server")
+
+        except Exception as e:
+            print(f"server is not Turned on: {e}")
+
+    def receiveMsgExit(self):
+        msg = self.client_socket.recv(1024).decode(self.FORMAT)
+        if msg == "exit":
+            self.isClosed = True
+            self.client_socket.close()
+
+    def send(self, msg):
+        try:
+            self.client_socket.sendall(msg.encode(self.FORMAT))
+        except Exception as e:
+            print("server is disconnected")
+            raise ServerOffline("server is Offline/Disconnected")
+
+    def close(self):
+        try:
+            if not self.isClosed:
+                self.client_socket.close()
+        except Exception as e:
+            print(f"connection is closed by remote host")
+        else:
+            self.isClosed = True
+            print("You disconnected with server")
+
+
+client = Client()
+
+if __name__ == '__main__':
+    cs = Client()
+    cs.connect("127.0.0.1", 65432)
+    print("msg auto send in 10secs")
+    time.sleep(10)
+    cs.send("hello manish")
+    time.sleep(20)
+    cs.close()
 
 # --------------------------------------both end can send and receive data via single socket
 

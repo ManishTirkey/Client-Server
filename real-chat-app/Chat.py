@@ -1,54 +1,117 @@
 from IPmapping import mapping as c
-import tkinter as tk
 from tkinter import ttk
-from tkinter import font, messagebox as m_box, colorchooser as cc
+from tkinter import font, messagebox as m_box
 from tkinter import *
-
+from CUSTOM_THREAD import thread_with_trace as CThread
 from threading import Thread
+from queue import Queue, Empty
 import time
 
+from ChatServer import Server as server
+from Client import client as cs
+
 import psutil
-import socket
 from urllib import request
 
 is_Online = "Offline"
-DEFAULT_PORT = 8084
+DEFAULT_PORT = 65432
 WORKING_THREADS_LIST = []
 
 
-def start_server():
-    pass
+def insert(msg):
+    print(msg)
+    # msg_txt.configure(state=NORMAL)
+    # msg_txt.insert(msg)
+    # msg_txt.configure(state=DISABLED)
 
 
-def close_server():
-    pass
+def insert_msg():
+    while is_Online != "Offline":
+        try:
+            msg = server.get_nowait()
+        except Empty:
+            pass
+        else:
+            insert(msg)
 
 
 def online_offline():
     global is_Online
     state = ""
 
-    is_Online = (lambda: "Online", lambda: "Offline")[is_Online == "Online"]()
+    # toggle is_Online
+    # is_Online = (lambda: "Online", lambda: "Offline")[is_Online == "Online"]()
+    msg_thread = CThread(target=insert_msg, daemon=True)
 
-    if is_Online == "Online":
-        print("going to online server")
-        Online.configure(text=is_Online, foreground="red")
-        state = "disale"
-        port_entry.configure(state='readonly')
+    if is_Online == "Offline":
+
+        adapter = Adapter_Combobox.get()
+        host = str(ADAPTER_LIST[adapter])
+        port = int(port_entry.get())
+
+        try:
+
+            server.Connect(host, port)
+            server.run()
+
+        except Exception as e:
+            print(f"online_offline error is: {e}")
+            m_box.showerror("Error", "Choose another Address")
+
+        else:
+            print("\t\t\tServer status offline")
+
+            is_Online = "Online"
+            state = "disable"
+
+            listen_label.configure(
+                text="Listening...", foreground="red", background="gray")
+            Online.configure(text=is_Online, foreground="red")
+            port_entry.configure(state='readonly')
+
+            msg_thread.start()
 
     else:
-        print("going to offline server")
-        Online.configure(text=is_Online, foreground="black")
+        server.stop()
+        is_Online = "Offline"
         state = "readonly"
+        print("\t\t\tServer status offline")
+
+        Online.configure(text=is_Online, foreground="black")
+        listen_label.configure(
+            text="Not Listening", foreground="black", background="#fff")
         port_entry.configure(state='normal')
+
+        if msg_thread.is_alive():
+            msg_thread.kill()
 
     Adapter_Combobox.configure(state=state)
     Connection_status.configure(text=is_Online)
     canvas.create_oval(1, 1, 13, 13, fill=STATUS[is_Online], outline=bg)
 
 
-def connect_to_ip(IP):
-    print(f"connecting to ip: {IP}")
+# normal style for client_button
+style = ttk.Style()
+style.configure("Custom.TButton", background="gray", foreground="black")
+
+prev_btn = None  # store previous pressed btn, so that can change the color
+
+# styling after clicking
+# clicked_style = ttk.Style()
+# clicked_style.configure("ClickedCustom.TButton", background="green", foreground="black")
+
+
+def connect_to_ip(btn, ip):
+    global prev_btn
+
+    if prev_btn:
+        prev_btn.configure(style="Custom.TButton")
+
+    cs.close()
+    cs.connect(str(ip), DEFAULT_PORT)
+    btn.configure(style="ClickedCustom.TButton")
+
+    prev_btn = btn
 
 
 def get_all_adapter():
@@ -85,8 +148,8 @@ def Check_Adapters(adapter_combobox):
         time.sleep(1)
 
 
-def update_IP(IP):
-    Selected_adapter_label.configure(text=IP)
+def update_IP(ip):
+    Selected_adapter_label.configure(text=ip)
 
 
 win = Tk()
@@ -137,12 +200,25 @@ content_frame = ttk.Frame(conversation_canvas, width=150)
 conversation_canvas.create_window((0, 0), window=content_frame, anchor="nw")
 
 
-def render_clients():
-    for client in c.get_all_maps():
-        label = ttk.Button(content_frame, text=client["name"])
-        label.pack(pady=1)
-        label.configure(command=lambda ip=client["ip"]: connect_to_ip(ip))
+def delete_render():
+    # print(content_frame.children) # all children in dict
+    for btn in content_frame.winfo_children():  # all children inside list
+        btn.grid_forget()
+        btn.destroy()
 
+
+def render_clients():
+    clients = c.get_all_maps()
+
+    for client in clients:
+        client_btn = ttk.Button(content_frame, text=client["name"])
+        client_btn.pack(pady=1)
+        client_btn.configure(command=lambda ip=client["ip"]: connect_to_ip(client_btn, ip))
+        client_btn.configure(style="Custom.TButton")
+
+
+
+render_clients()
 
 content_frame.update_idletasks()
 conversation_canvas.configure(
@@ -168,6 +244,49 @@ scroll_chat.configure(command=msg_txt.yview)
 
 msg_txt.pack(fill=BOTH, expand=True)
 msg_txt.configure(width=10, wrap="word", state=DISABLED, yscrollcommand=scroll_chat.set)
+
+# --------------
+PlaceHolder = "Enter Your Msg"
+
+
+def on_focus_in(element, placeholder):
+    if element.get() == placeholder:
+        element.delete(0, "end")
+        element.config(foreground='black')
+
+
+def on_focus_out(element, placeholder):
+    if element.get() == "":
+        element.insert(0, placeholder)
+        element.config(foreground='grey')
+
+
+def sendTxt():
+    msg = sendingTxt.get()
+    try:
+        cs.send(msg)
+        sendingTxt.delete(0, END)
+    except Exception as e:
+        m_box.showinfo("Server", f"{e}")
+
+
+sendingFrame = LabelFrame(chat_frame, text="send your msg", labelanchor=NE)
+sendingFrame.pack(side=BOTTOM, fill=X)
+
+sendingTxt = Entry(sendingFrame)
+sendingTxt.configure(width=100)
+sendingTxt.insert(0, PlaceHolder)
+sendingTxt.config(foreground="grey")
+sendingTxt.pack(side=LEFT, pady=10, padx=(10, 0), ipady=10, ipadx=10)
+
+send_btn = ttk.Button(sendingFrame, text="Send")
+send_btn.pack(side=RIGHT, padx=(0, 10))
+send_btn.configure(command=lambda: sendTxt())
+
+sendingTxt.bind("<FocusIn>", lambda e: on_focus_in(sendingTxt, PlaceHolder))
+sendingTxt.bind("<FocusOut>", lambda e: on_focus_out(sendingTxt, PlaceHolder))
+
+win.bind("<Control-Return>", lambda e: sendTxt())
 
 # ------------------- bottom - signature
 
@@ -221,7 +340,7 @@ port_label.config(background=bg)
 
 port_entry = ttk.Entry(level_1l)
 port_entry.grid(row=0, column=2)
-port_entry.insert(0, DEFAULT_PORT)
+port_entry.insert(0, str(DEFAULT_PORT))
 
 listen_label = Label(level_1l, text="Not Listening")
 listen_label.grid(row=0, column=3, padx=(20, 10))
@@ -244,7 +363,7 @@ def new_client():
     ip_placeholder = "Enter computer's ip address"
     name_placeholder = "Enter client name"
 
-    def on_entry_click(element, placeholder):
+    def on_focus_in(element, placeholder):
         if element.get() == placeholder:
             element.delete(0, "end")
             element.config(foreground='black')
@@ -256,9 +375,16 @@ def new_client():
 
     new_client_gui = Toplevel()
     new_client_gui.title("New Chat")
-    new_client_gui.geometry("450x200+50+50")
     new_client_gui.minsize(450, 200)
     new_client_gui.maxsize(450, 200)
+    # new_client_gui.geometry("450x200+50+50")
+
+    # pop up in the center of main window
+    new_client_gui.geometry(
+        "+%d+%d" % (win.winfo_rootx() + win.winfo_width() // 2 - new_client_gui.winfo_reqwidth() // 2,
+                    win.winfo_rooty() + win.winfo_height() // 2 - new_client_gui.winfo_reqheight() // 2))
+
+    new_client_gui.transient(win)
 
     top_frame = Frame(new_client_gui)
     top_frame.pack(side=TOP, fill=BOTH, expand=True)
@@ -274,29 +400,35 @@ def new_client():
     ip_entry = ttk.Entry(client_info_frame)
     ip_entry.insert(0, ip_placeholder)
     ip_entry.grid(row=0, column=1, ipadx=80, pady=5, sticky=W)
+    ip_entry.config(foreground='grey')
 
     Label(client_info_frame, text="Name: ").grid(row=1, column=0, sticky=W, pady=5, padx=(10, 20))
     name_entry = ttk.Entry(client_info_frame)
     name_entry.insert(0, name_placeholder)
     name_entry.grid(row=1, column=1, pady=5, ipadx=60, sticky=W)
+    name_entry.config(foreground='grey')
 
-    ip_entry.bind("<FocusIn>", lambda e: on_entry_click(ip_entry, ip_placeholder))
+    ip_entry.bind("<FocusIn>", lambda e: on_focus_in(ip_entry, ip_placeholder))
     ip_entry.bind("<FocusOut>", lambda e: on_focus_out(ip_entry, ip_placeholder))
 
-    name_entry.bind("<FocusIn>", lambda e: on_entry_click(name_entry, name_placeholder))
+    name_entry.bind("<FocusIn>", lambda e: on_focus_in(name_entry, name_placeholder))
     name_entry.bind("<FocusOut>", lambda e: on_focus_out(name_entry, name_placeholder))
     new_client_gui.bind("<Return>", lambda e: ok())
 
     # ---------------------
 
     def ok():
+        # new_client_gui.grab_set()
+
         ip_placeholder = "Enter computer's ip address"
         name_placeholder = "Enter client name"
 
         ip = ip_entry.get()
         name = name_entry.get()
 
-        if ip != ip_placeholder and name != name_placeholder:
+        Exclude_list = [ip_placeholder, name_placeholder, ""]
+
+        if ip not in Exclude_list and name not in Exclude_list:
             client = {
                 'ip': ip,
                 'name': name,
@@ -306,10 +438,15 @@ def new_client():
             except Exception as e:
                 m_box.showerror("Error", "IP/Name Already Exists")
             else:
-                clients()
-                exit()
+                Exit()
+                delete_render()
+                render_clients()
 
-    def exit():
+            finally:
+                # new_client_gui.grab_release()
+                pass
+
+    def Exit():
         new_client_gui.destroy()
 
     bg = "#cfcfcf"
@@ -326,7 +463,9 @@ def new_client():
 
     cancel_btn = ttk.Button(bottom_right_frame, text="Cancel")
     cancel_btn.grid(row=0, column=1)
-    cancel_btn.configure(command=exit)
+    cancel_btn.configure(command=Exit)
+
+    # new_client_gui.protocol("WM_DELETE_WINDOW", Exit) # executes Exit function after clicking window close btn
 
     new_client_gui.mainloop()
 
@@ -345,9 +484,9 @@ Online = Button(left_frame, text=is_Online)
 Online.grid(row=0, column=0, padx=20)
 Online.configure(command=online_offline)
 
-Adapter_Combobox = ttk.Combobox(left_frame)
+Adapter_Combobox = ttk.Combobox(left_frame, state='readonly')
 Adapter_Combobox.grid(row=0, column=1, padx=8)
-Adapter_Combobox.configure(state="readonly", width=35)
+Adapter_Combobox.configure(width=35)
 
 Adapter_Combobox.bind("<<ComboboxSelected>>", lambda a: update_IP(ADAPTER_LIST[Adapter_Combobox.get()]))
 
@@ -365,6 +504,8 @@ new_client_btn.configure(command=new_client)
 
 
 def Close():
+    if is_Online == "Online":
+        online_offline()
     win.destroy()
 
 

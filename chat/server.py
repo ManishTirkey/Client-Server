@@ -2,7 +2,6 @@ import socket
 import threading
 from _Colors_ import colors
 import select
-from threading import Thread
 
 # HOST = "127.0.0.1"
 # PORT = 65432
@@ -29,7 +28,7 @@ from threading import Thread
 # ---------------------------
 
 # HOST = socket.gethostbyname(socket.gethostname())
-HOST = "192.168.217.190"
+HOST = "127.0.0.1"
 PORT = 65432
 ADDR = (HOST, PORT)
 HEADER = 64
@@ -40,41 +39,47 @@ server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 server.bind(ADDR)
 
-print(f"{colors.bold} Server listening on: {ADDR} {colors.reset}")
+# print(f"{colors.bold} Server listening on: {ADDR} {colors.reset}")
+print(f"Server listening on: {ADDR} ")
 server.listen()
 
 
 # ----------------------
 def Users(conn, addr):
-    dis_msg = ""
+    # dis_msg = ""
     msg = f"Welcome user {str(addr)}"
-    conn.sendall(msg.encode("utf-8"))
-    CONNECTED = True
+    # conn.sendall(msg.encode("utf-8"))
+    conn.sendall("exit".encode("utf-8"))
+
     ADDRESS = addr[0]
     CLIENT_PORT = addr[1]
-    while CONNECTED:
+    while True:
         message = conn.recv(1024).decode(FORMAT)
-        if message:
-            pr_msg = f"{colors.fg.black}[{str(ADDRESS)}, {str(CLIENT_PORT)}]{colors.reset}{colors.bold}:{colors.reset} {colors.fg.green}{str(message)} {colors.reset}"
-            if message.lower() == "exit":
-                print(pr_msg)
-                dis_msg = f"\n{colors.fg.red}User {addr} Disconnected.....{colors.reset}"
-                conn.close()
-                break
+        # pr_msg = f"{colors.fg.black}[{str(ADDRESS)}, {str(CLIENT_PORT)}]{colors.reset}{colors.bold}:{colors.reset} {colors.fg.green}{str(message)} {colors.reset}"
+        pr_msg = f"{str(ADDRESS)}:{str(CLIENT_PORT)}/> {str(message)}"
+        if not message:
             print(pr_msg)
+            # dis_msg = f"\n{colors.fg.red}User {addr} Disconnected.....{colors.reset}"
+            dis_msg = f"\nUser {addr} Disconnected....."
+            conn.close()
+            break
+        print(pr_msg)
     print("client disconnected....")
-    print(dis_msg)
+    # print(dis_msg)
 
 
 # ----------------------
 
-while not SERVER_CLOSE:
-    print(f"waiting for new connections...")
-    conn, addr = server.accept()
+# while not SERVER_CLOSE:
+print(f"waiting for new connections...")
+conn, addr = server.accept()
     
-    print(f"\n{colors.fg.black}[NEW CONNECTION {addr}], CONNECTED to the Server")
+# print(f"\n{colors.fg.black}[NEW CONNECTION {addr}], CONNECTED to the Server")
+print(f"\n[NEW CONNECTION {addr}], CONNECTED to the Server")
 
-    user_thread = Thread(target=Users, args=(conn, addr,))
-    user_thread.start()
+user_thread = threading.Thread(target=Users, daemon=True, args=(conn, addr,))
+user_thread.start()
 
-    print(f"[ACTIVE CONNECTIONS]: {threading.active_count() - 1} {colors.reset}")
+print(f"[ACTIVE CONNECTIONS]: {threading.active_count() - 1}")
+
+user_thread.join()

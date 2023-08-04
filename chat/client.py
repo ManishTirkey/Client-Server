@@ -1,4 +1,6 @@
 import socket
+import time
+
 # import enum
 # import ipaddress
 # from ClientAdapters import Adapter
@@ -7,7 +9,7 @@ from _Colors_ import colors
 
 
 CLIENT_HOST = socket.gethostbyname(socket.gethostname())
-SERVER_HOST = "192.168.217.190"
+SERVER_HOST = "127.0.0.1"
 PORT = 65432
 
 sh = input(f"SERVER_HOST{colors.fg.red}[{SERVER_HOST}]{colors.reset}: ")
@@ -37,16 +39,27 @@ def connect_to_server(ADDR):
         print(cs)
         data = cs.recv(2028).decode(FORMAT)
         print(f"\n\t\t\tSOCKET IP: {CLIENT_HOST}")
-        print(f"{colors.fg.lightred}server:{colors.bold} {colors.fg.lightgreen}{data}{colors.reset}")
+        # print(f"{colors.fg.lightred}server:{colors.bold} {colors.fg.lightgreen}{data}{colors.reset}")
 
-        CONNECTED = True
-        while CONNECTED:
-            msg = input(f"{colors.fg.black}[You]{colors.reset}{colors.bold}:{colors.reset}{colors.fg.green} ")
-            cs.sendall(msg.encode("utf-8"))
-            if msg.lower() == "exit":
-                print(f"{colors.reset}{colors.fg.red}Disconnected....{colors.reset}")
-                cs.close()
-                CONNECTED = False
+        time.sleep(5)
+        print(f"server: {data}")
+
+        if data == "exit":
+            print("closing from client")
+            cs.close()
+
+        # while False:
+        #     # msg = input(f"{colors.fg.black}[You]{colors.reset}{colors.bold}:{colors.reset}{colors.fg.green} ")
+        #     msg = input(f"[You]: ")
+        #
+        #     if msg.lower() == "exit":
+        #         # print(f"{colors.reset}{colors.fg.red}Disconnected....{colors.reset}")
+        #         print(f"Disconnected....")
+        #         cs.close()
+        #         break
+        #     print(f"sending msg: {msg}")
+        #     cs.sendall(msg.encode("utf-8"))
+        print("you are disconnected with server")
 
 
 connect_to_server(ADDR)
