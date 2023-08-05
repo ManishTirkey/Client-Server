@@ -8,7 +8,7 @@ from queue import Queue, Empty
 import time
 
 from ChatServer import Server as server
-from Client import client as cs
+from Client import client as cs, ServerOffline
 
 import psutil
 from urllib import request
@@ -18,11 +18,41 @@ DEFAULT_PORT = 65432
 WORKING_THREADS_LIST = []
 
 
-def insert(msg):
+class CustomButton(ttk.Button):
+    def __init__(self, master=None, **kwargs):
+        super().__init__(master, **kwargs)
+
+        self.left_canvas = Canvas(self, width=16, height=16, highlightthickness=0)
+        self.left_canvas.pack(side=LEFT, padx=10, pady=2)
+
+    def forget_canvas(self):
+        self.left_canvas.grid_forget()
+
+    def status(self, **kwargs):
+        fill = kwargs['fill']
+        if fill:
+            self.left_canvas.create_oval(2, 2, 14, 14, fill=fill, outline=fill)
+            self.left_canvas.pack(side=LEFT, padx=5, pady=2)
+
+
+def insertServerMsg(msg):
+    msg_txt.tag_configure("red_tag", foreground="green")
+    msg_txt.tag_configure("blue_tag", foreground="white")
+
+    print(type(msg))
     print(msg)
-    # msg_txt.configure(state=NORMAL)
-    # msg_txt.insert(msg)
-    # msg_txt.configure(state=DISABLED)
+
+    ip = msg['address'][0]
+    name = c.get_name_with_ip(ip)
+
+    msg_txt.configure(state=NORMAL)
+    # msg_txt.insert(END, f"{str(msg['address'])}:/> ", "red_tag")
+    msg_txt.insert(END, f"{name}/> ", "red_tag")
+    msg_txt.insert(END, str(msg['msg']), "blue_tag")
+    msg_txt.insert(END, "\n")
+    # msg_txt.insert(END, msg['msg'])
+
+    msg_txt.configure(state=DISABLED)
 
 
 def insert_msg():
@@ -32,7 +62,11 @@ def insert_msg():
         except Empty:
             pass
         else:
-            insert(msg)
+            insertServerMsg(msg)
+
+        finally:
+            clientNo = server.Total_clients()
+            Client_no_label.configure(text=f"{clientNo}")
 
 
 def online_offline():
@@ -90,28 +124,26 @@ def online_offline():
     canvas.create_oval(1, 1, 13, 13, fill=STATUS[is_Online], outline=bg)
 
 
-# normal style for client_button
-style = ttk.Style()
-style.configure("Custom.TButton", background="gray", foreground="black")
-
 prev_btn = None  # store previous pressed btn, so that can change the color
-
-# styling after clicking
-# clicked_style = ttk.Style()
-# clicked_style.configure("ClickedCustom.TButton", background="green", foreground="black")
 
 
 def connect_to_ip(btn, ip):
     global prev_btn
 
     if prev_btn:
-        prev_btn.configure(style="Custom.TButton")
+        prev_btn.status(fill="gray")
 
-    cs.close()
-    cs.connect(str(ip), DEFAULT_PORT)
-    btn.configure(style="ClickedCustom.TButton")
+    try:
+        cs.close()
+        print(f"ip is: {ip}")
+        cs.connect(str(ip), DEFAULT_PORT)
 
-    prev_btn = btn
+    except ServerOffline as e:
+        m_box.showerror("Server", f"{e}")
+
+    else:
+        btn.status(fill="green")
+        prev_btn = btn
 
 
 def get_all_adapter():
@@ -159,6 +191,17 @@ win.iconbitmap("icon.ico")
 COLOR = "#DCDCDC"
 win.configure(background=COLOR)
 
+# -------------------styling
+
+# normal style for client_button
+style = ttk.Style(win)
+style.configure("Custom.TButton", background="gray", foreground="black")
+
+# styling after clicking
+clicked_style = ttk.Style(win)
+clicked_style.configure("ClickedCustom.TButton", background="green", foreground="black")
+
+
 # -----------widgets------------
 
 WIDGETS = Frame(win)
@@ -173,10 +216,7 @@ top = Frame(win)
 top.pack(fill=BOTH, expand=True, padx=10, pady=10)
 top.configure(background="#DCDCDC")
 
-top_panedwindow = PanedWindow(top, orient=HORIZONTAL,
-                              showhandle=True,
-                              background=COLOR
-                              )
+top_panedwindow = PanedWindow(top, orient=HORIZONTAL, showhandle=True, background=COLOR)
 top_panedwindow.pack(fill=BOTH, expand=True)
 
 # ---------send
@@ -211,11 +251,12 @@ def render_clients():
     clients = c.get_all_maps()
 
     for client in clients:
-        client_btn = ttk.Button(content_frame, text=client["name"])
-        client_btn.pack(pady=1)
-        client_btn.configure(command=lambda ip=client["ip"]: connect_to_ip(client_btn, ip))
-        client_btn.configure(style="Custom.TButton")
-
+        # client_btn = ttk.Button(content_frame, text=client["name"])
+        client_btn = CustomButton(content_frame, text=client["name"])
+        client_btn.pack(padx=10, pady=5, ipadx=50, ipady=6)
+        client_btn.configure(command=lambda Cbtn=client_btn, ip=client["ip"]: connect_to_ip(Cbtn, ip))
+        client_btn.status(fill="gray")
+        # client_btn.configure(style="Custom.TButton")
 
 
 render_clients()
@@ -244,7 +285,7 @@ scroll_chat.configure(command=msg_txt.yview)
 
 msg_txt.pack(fill=BOTH, expand=True)
 msg_txt.configure(width=10, wrap="word", state=DISABLED, yscrollcommand=scroll_chat.set)
-
+msg_txt.configure(background="#1D1D39")
 # --------------
 PlaceHolder = "Enter Your Msg"
 
@@ -265,9 +306,23 @@ def sendTxt():
     msg = sendingTxt.get()
     try:
         cs.send(msg)
-        sendingTxt.delete(0, END)
+
     except Exception as e:
         m_box.showinfo("Server", f"{e}")
+
+    else:
+        sendingTxt.delete(0, END)
+
+        msg_txt.tag_configure("red_tag", foreground="green")
+        msg_txt.tag_configure("blue_tag", foreground="white")
+
+        msg_txt.configure(state=NORMAL)
+
+        msg_txt.insert(END, "YOU:/> ", "red_tag")
+        msg_txt.insert(END, f"{msg}", "blue_tag")
+        msg_txt.insert(END, "\n")
+
+        msg_txt.configure(state=DISABLED)
 
 
 sendingFrame = LabelFrame(chat_frame, text="send your msg", labelanchor=NE)
@@ -506,6 +561,8 @@ new_client_btn.configure(command=new_client)
 def Close():
     if is_Online == "Online":
         online_offline()
+
+    cs.close()
     win.destroy()
 
 

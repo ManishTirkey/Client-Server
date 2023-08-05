@@ -269,17 +269,18 @@ class QueueEmpty(Exception):
 class LockingMechanism(queue.Queue):
     def __init__(self):
         super().__init__()
-        self.lock = threading.Lock()
+        # self.lock = threading.Lock()
 
     def insert(self, data):
-        with self.lock:
-            self.put(data)
+        # with self.lock:
+        self.put(data)
 
 
 class ChatServer(LockingMechanism):
     def __init__(self):
         super().__init__()
 
+        self.server_socket = None
         self.FORMAT = 'utf-8'
         self.host = None
         self.port = None
@@ -288,20 +289,32 @@ class ChatServer(LockingMechanism):
         self.isRunning = False
         self.SERVER = None
 
-        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
     def receive_client_msg(self, sock, addr):
         while True:
-            data = sock.recv(1024).decode(self.FORMAT)
-            if not data:
-                print(f"{addr} is disconnected.")
+            try:
+                data = sock.recv(1024).decode(self.FORMAT)
+            except:
+                print("error on receiving data")
                 break
-            data_list = {
-                "address": addr,
-                "msg": data
-            }
-            self.insert(data_list)
+
+            else:
+                if not data:
+                    print(f"{addr} is disconnected.")
+                    break
+                data_list = {
+                    "address": addr,
+                    "msg": data
+                }
+                self.insert(data_list)
+
+        print("----------removing socket from list")
+        self.client_socket.remove(sock)
+        print(self.client_socket)
+        print("removed")
+
+    def Total_clients(self):
+        return len(self.client_socket)
+
         # while True:
         #     data = sock.recv(1024).decode(FORMAT)
         #     if data:
@@ -318,10 +331,6 @@ class ChatServer(LockingMechanism):
         #             break
         # print(f"{addr} is disconnected")
 
-    def handle_client(self, client_socket, addr):
-        client_receive_thread = CThread(target=self.receive_client_msg, daemon=True, args=(client_socket, addr))
-        client_receive_thread.start()
-
     def start_server(self):
         self.isRunning = True
 
@@ -333,13 +342,13 @@ class ChatServer(LockingMechanism):
                 conn, addr = self.server_socket.accept()
                 self.client_socket.append(conn)
 
-                client_thread = CThread(target=self.handle_client, daemon=True, args=(conn, addr))
+                client_thread = CThread(target=self.receive_client_msg, daemon=True, args=(conn, addr))
                 client_thread.start()
 
                 self.client_threads.append(client_thread)
 
         except Exception as e:
-            print(f"an error is occured in server, error is: {e}")
+            print(f"an error is occurred in server, error is: {e}")
         finally:
             self.isRunning = False
 
@@ -356,12 +365,17 @@ class ChatServer(LockingMechanism):
     def Connect(self, host, port):
         self.host = host
         self.port = port
+        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
     def stop(self):
         print("client sockets: ")
-        for client in self.client_socket:
-            print(f"client: {client}")
-            client.sendall("exit".encode(self.FORMAT))
+        try:
+            for client in self.client_socket:
+                print(f"client: {client}")
+                client.sendall("exit".encode(self.FORMAT))
+        except:
+            print("error while exit")
             # try:
             #     client.close()
             # except Exception as e:

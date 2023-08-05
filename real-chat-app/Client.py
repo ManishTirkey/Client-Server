@@ -42,36 +42,45 @@ class ServerOffline(Exception):
 
 class Client:
     def __init__(self):
+        self.client_socket = None
         self.server = None
         self.port = None
         self.ADDR = None
         self.FORMAT = "utf-8"
         self.isClosed = True
 
-        self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
     def connect(self, server, port):
         self.server = server
         self.port = port
-        self.isClosed = False
+        self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.client_socket.settimeout(5)
 
         self.ADDR = (self.server, self.port)
+
         try:
 
             # with self.client_socket as self.CONNECTION:
             self.client_socket.connect(self.ADDR)
-            receiver_thread = threading.Thread(target=self.receiveMsgExit, daemon=True)
-            receiver_thread.start()
+
             print(f"client {self.ADDR} connected to server")
 
         except Exception as e:
             print(f"server is not Turned on: {e}")
+            raise ServerOffline("server isn't listening")
+
+        else:
+            self.isClosed = False
+            receiver_thread = threading.Thread(target=self.receiveMsgExit, daemon=True)
+            receiver_thread.start()
 
     def receiveMsgExit(self):
-        msg = self.client_socket.recv(1024).decode(self.FORMAT)
-        if msg == "exit":
-            self.isClosed = True
-            self.client_socket.close()
+        try:
+            msg = self.client_socket.recv(1024).decode(self.FORMAT)
+            if msg == "exit":
+                self.isClosed = True
+                self.client_socket.close()
+        except:
+            print("error on receiveMsgExit")
 
     def send(self, msg):
         try:
