@@ -9,6 +9,7 @@ import time
 
 from ChatServer import Server as server
 from Client import client as cs, ServerOffline
+from IPmapping import ExistNameMappingException, ExistIPException
 
 import psutil
 from urllib import request
@@ -35,6 +36,26 @@ class CustomButton(ttk.Button):
             self.left_canvas.pack(side=LEFT, padx=5, pady=2)
 
 
+def Gray_btn():
+    if prev_btn:
+        prev_btn.status(fill="gray")
+
+
+def close_client():
+    cs.close()
+
+
+def monitor_client_status():
+    while not cs.isClosed:
+        pass
+    Gray_btn()
+
+
+def close_current_client():
+    close_client()
+    chat_labelframe.configure(text="Chats")
+
+
 def insertServerMsg(msg):
     msg_txt.tag_configure("red_tag", foreground="green")
     msg_txt.tag_configure("blue_tag", foreground="white")
@@ -55,7 +76,7 @@ def insertServerMsg(msg):
     msg_txt.configure(state=DISABLED)
 
 
-def insert_msg():
+def monitorData():
     while is_Online != "Offline":
         try:
             msg = server.get_nowait()
@@ -75,7 +96,7 @@ def online_offline():
 
     # toggle is_Online
     # is_Online = (lambda: "Online", lambda: "Offline")[is_Online == "Online"]()
-    msg_thread = CThread(target=insert_msg, daemon=True)
+    msg_thread = CThread(target=monitorData, daemon=True)
 
     if is_Online == "Offline":
 
@@ -130,11 +151,10 @@ prev_btn = None  # store previous pressed btn, so that can change the color
 def connect_to_ip(btn, ip):
     global prev_btn
 
-    if prev_btn:
-        prev_btn.status(fill="gray")
+    mcs = Thread(target=monitor_client_status, daemon=True)
 
     try:
-        cs.close()
+        close_client()
         print(f"ip is: {ip}")
         cs.connect(str(ip), DEFAULT_PORT)
 
@@ -142,7 +162,9 @@ def connect_to_ip(btn, ip):
         m_box.showerror("Server", f"{e}")
 
     else:
+        mcs.start()
         btn.status(fill="green")
+        chat_labelframe.configure(text=f"{ip}")
         prev_btn = btn
 
 
@@ -186,7 +208,8 @@ def update_IP(ip):
 
 win = Tk()
 win.title("Local Area Network Chat")
-win.geometry("1200x600+50+50")
+win.geometry("1300x700+10+10")
+win.minsize(1200, 700)
 win.iconbitmap("icon.ico")
 COLOR = "#DCDCDC"
 win.configure(background=COLOR)
@@ -200,7 +223,6 @@ style.configure("Custom.TButton", background="gray", foreground="black")
 # styling after clicking
 clicked_style = ttk.Style(win)
 clicked_style.configure("ClickedCustom.TButton", background="green", foreground="black")
-
 
 # -----------widgets------------
 
@@ -220,11 +242,13 @@ top_panedwindow = PanedWindow(top, orient=HORIZONTAL, showhandle=True, backgroun
 top_panedwindow.pack(fill=BOTH, expand=True)
 
 # ---------send
+client_background = "#201d3e"
+
+
 msg_frame = LabelFrame(top, text="Clients")
 top_panedwindow.add(msg_frame)
 msg_frame.configure(
-    background=COLOR,
-    borderwidth=2,
+    borderwidth=1,
     labelanchor=N,
     highlightthickness=0
 )
@@ -232,62 +256,179 @@ msg_frame.configure(
 conversation_canvas = Canvas(msg_frame, width=150)
 conversation_canvas.pack(side=LEFT, fill="both", expand=True)
 
-scroll_bar = Scrollbar(msg_frame, orient="vertical")
+scroll_bar = Scrollbar(msg_frame, orient="vertical", command=conversation_canvas.yview)
 scroll_bar.pack(side=RIGHT, fill=Y)
-scroll_bar.config(command=conversation_canvas.yview, background=COLOR)
+scroll_bar.config(background=COLOR)
 
-content_frame = ttk.Frame(conversation_canvas, width=150)
+# conversation_canvas.configure(yscrollcommand=scroll_bar.set)
+
+content_frame = Frame(conversation_canvas, width=150)
 conversation_canvas.create_window((0, 0), window=content_frame, anchor="nw")
+content_frame.configure(
+    borderwidth=0,
+    highlightthickness=0
+)
+
+
+def Update_scroll_region():
+    conversation_canvas.configure(scrollregion=conversation_canvas.bbox("all"))
+
+
+content_frame.bind("<Configure>", lambda e: Update_scroll_region())
+ 
+
+def ShowIP(btn, ip):
+    win.title(f"{ip}")
+    btn.after(10000, lambda: win.title("Local Area Network Chat"))
 
 
 def delete_render():
     # print(content_frame.children) # all children in dict
     for btn in content_frame.winfo_children():  # all children inside list
-        btn.grid_forget()
-        btn.destroy()
+        if btn.__class__ != ttk.Button().__class__:
+            btn.grid_forget()
+            btn.destroy()
+
+
+client_btns = []
 
 
 def render_clients():
+    global client_btns
+    client_btns.clear()
+
     clients = c.get_all_maps()
 
     for client in clients:
-        # client_btn = ttk.Button(content_frame, text=client["name"])
         client_btn = CustomButton(content_frame, text=client["name"])
         client_btn.pack(padx=10, pady=5, ipadx=50, ipady=6)
         client_btn.configure(command=lambda Cbtn=client_btn, ip=client["ip"]: connect_to_ip(Cbtn, ip))
         client_btn.status(fill="gray")
+
+        client_btn.bind("<Button-3>", lambda e, cbtn=client_btn, ip=client['ip']: ShowIP(cbtn, ip))
+
         # client_btn.configure(style="Custom.TButton")
+        client_btns.append(client_btn)
+        Update_scroll_region()
+
+
+close_client_btn = ttk.Button(content_frame, text="Close Connection")
+close_client_btn.pack(padx=10, pady=5, ipadx=6, ipady=6)
+close_client_btn.configure(command=lambda: close_current_client())
 
 
 render_clients()
 
 content_frame.update_idletasks()
 conversation_canvas.configure(
-    scrollregion=conversation_canvas.bbox("all"),
     yscrollcommand=scroll_bar.set
 )
+Update_scroll_region()
 
 # -------------------chat
-
-chat_frame = LabelFrame(top, text="chats", width=700)
+chat_frame = Frame(top)
 top_panedwindow.add(chat_frame)
-chat_frame.configure(background=COLOR,
-                     highlightthickness=0,
-                     labelanchor=N,
-                     borderwidth=0,
-                     )
+chat_frame.configure(background="#fff")
 
-scroll_chat = ttk.Scrollbar(chat_frame)
+# ----------------
+
+
+def Connect():
+    ip = ip_entry.get()
+    name = name_entry.get()
+
+    Exclude_list = [IP_PlaceHolder, NAME_PlaceHolder, ""]
+
+    client = {}
+
+    try:
+
+        if ip not in Exclude_list and name == NAME_PlaceHolder:
+            client['ip'] = ip
+            client['name'] = ip
+
+        elif ip not in Exclude_list and name != "":
+            client['ip'] = ip
+            client['name'] = name
+
+        else:
+            raise ValueError("Enter valid ip/name")
+
+        c.insert(client)
+
+    except ValueError as e:
+        m_box.showerror("Value Error", f"{e}")
+
+    except ExistIPException as e:
+        m_box.showerror("IP Exist", f"{e}")
+
+    except ExistNameMappingException as e:
+        m_box.showerror("Name Exist", f"{e}")
+
+    else:
+        delete_render()
+        render_clients()
+        if checkbtn.get():
+            connect_to_ip(client_btns[-1], ip)
+
+
+connect_frame = LabelFrame(chat_frame, text="Connect-Remote")
+connect_frame.configure(labelanchor=NW)
+connect_frame.pack(side=TOP, fill=X)
+
+IP_PlaceHolder = "Enter remote host IP:"
+NAME_PlaceHolder = "suggest name for host: manish"
+width = 40
+
+ip_entry = ttk.Entry(connect_frame)
+ip_entry.insert(0, IP_PlaceHolder)
+ip_entry.grid(row=0, column=0, padx=(5, 10),pady=4)
+ip_entry.configure(foreground="gray", width=width)
+
+name_entry = ttk.Entry(connect_frame)
+name_entry.insert(0, NAME_PlaceHolder)
+name_entry.grid(row=0, column=1, padx=(10, 5), pady=4)
+name_entry.configure(foreground="gray", width=width)
+
+connect_button = ttk.Button(connect_frame, text="Connect")
+connect_button.grid(row=0, column=2, pady=4)
+connect_button.configure(command=Connect)
+
+checkbtn = BooleanVar(value=False)
+auto_connect = ttk.Checkbutton(connect_frame, variable=checkbtn, text="Auto Connect")
+auto_connect.grid(row=0, column=3, padx=(15, 0))
+
+ip_entry.bind("<FocusIn>", lambda e: on_focus_in(ip_entry, IP_PlaceHolder))
+ip_entry.bind("<FocusOut>", lambda e: on_focus_out(ip_entry, IP_PlaceHolder))
+
+name_entry.bind("<FocusIn>", lambda e: on_focus_in(name_entry, NAME_PlaceHolder))
+name_entry.bind("<FocusOut>", lambda e: on_focus_out(name_entry, NAME_PlaceHolder))
+
+# ----------------
+
+# ---- chat label Frame
+
+# chat_labelframe = LabelFrame(top, text="Chats", width=700)
+chat_labelframe = LabelFrame(chat_frame, text="Chats", width=700)
+# top_panedwindow.add(chat_labelframe)
+chat_labelframe.pack(side=TOP, fill=BOTH, expand=True)
+chat_labelframe.configure(background=COLOR,
+                          highlightthickness=0,
+                          labelanchor=N,
+                          borderwidth=0,
+                          )
+
+scroll_chat = ttk.Scrollbar(chat_labelframe)
 scroll_chat.pack(side=RIGHT, fill=Y)
 
-msg_txt = Text(chat_frame)
+msg_txt = Text(chat_labelframe)
 scroll_chat.configure(command=msg_txt.yview)
 
 msg_txt.pack(fill=BOTH, expand=True)
 msg_txt.configure(width=10, wrap="word", state=DISABLED, yscrollcommand=scroll_chat.set)
 msg_txt.configure(background="#1D1D39")
 # --------------
-PlaceHolder = "Enter Your Msg"
+MSG_PlaceHolder = "Enter Your Msg"
 
 
 def on_focus_in(element, placeholder):
@@ -325,12 +466,12 @@ def sendTxt():
         msg_txt.configure(state=DISABLED)
 
 
-sendingFrame = LabelFrame(chat_frame, text="send your msg", labelanchor=NE)
+sendingFrame = LabelFrame(chat_labelframe, text="send your msg", labelanchor=NE)
 sendingFrame.pack(side=BOTTOM, fill=X)
 
 sendingTxt = Entry(sendingFrame)
 sendingTxt.configure(width=100)
-sendingTxt.insert(0, PlaceHolder)
+sendingTxt.insert(0, MSG_PlaceHolder)
 sendingTxt.config(foreground="grey")
 sendingTxt.pack(side=LEFT, pady=10, padx=(10, 0), ipady=10, ipadx=10)
 
@@ -338,8 +479,8 @@ send_btn = ttk.Button(sendingFrame, text="Send")
 send_btn.pack(side=RIGHT, padx=(0, 10))
 send_btn.configure(command=lambda: sendTxt())
 
-sendingTxt.bind("<FocusIn>", lambda e: on_focus_in(sendingTxt, PlaceHolder))
-sendingTxt.bind("<FocusOut>", lambda e: on_focus_out(sendingTxt, PlaceHolder))
+sendingTxt.bind("<FocusIn>", lambda e: on_focus_in(sendingTxt, MSG_PlaceHolder))
+sendingTxt.bind("<FocusOut>", lambda e: on_focus_out(sendingTxt, MSG_PlaceHolder))
 
 win.bind("<Control-Return>", lambda e: sendTxt())
 
@@ -555,14 +696,14 @@ right_frame.configure(background=COLOR)
 
 new_client_btn = ttk.Button(right_frame, text="New Chat")
 new_client_btn.grid(row=0, column=0, padx=(0, 50))
-new_client_btn.configure(command=new_client)
+new_client_btn.configure(command=new_client, state=DISABLED)
 
 
 def Close():
     if is_Online == "Online":
         online_offline()
 
-    cs.close()
+    close_client()
     win.destroy()
 
 
