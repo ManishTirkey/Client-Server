@@ -53,13 +53,13 @@ class Client:
         self.server = server
         self.port = port
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.client_socket.settimeout(5)
 
         self.ADDR = (self.server, self.port)
 
         try:
 
             # with self.client_socket as self.CONNECTION:
+            # self.client_socket.settimeout(10)
             self.client_socket.connect(self.ADDR)
 
             print(f"client {self.ADDR} connected to server")
@@ -79,8 +79,8 @@ class Client:
             if msg == "exit":
                 self.isClosed = True
                 self.client_socket.close()
-        except:
-            print("error on receiveMsgExit")
+        except Exception as e:
+            print(f"error on receiveMsgExit {e}")
 
     def send(self, msg):
         try:
